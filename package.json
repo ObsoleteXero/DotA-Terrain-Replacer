@@ -1,8 +1,7 @@
 {
   "name": "dota-terrain-replacer",
   "version": "1.0.0",
-  "description": "NodeJS app to modify the terrain in Dota 2, allowing the use of any available terrain regardless of ownership.",
-  "type": "module",
+  "description": "App to patch the default map file in DotA 2 with the selected terrain file, allowing the use of all terrains regardless of ownership.",
   "main": "main.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -15,7 +14,8 @@
     "Dota",
     "Electron",
     "Node",
-    "Mod"
+    "Mod",
+    "Game"
   ],
   "author": "ObsoleteXero",
   "license": "MIT",
@@ -24,14 +24,10 @@
   },
   "homepage": "https://github.com/ObsoleteXero/DotA-Terrain-Replacer#readme",
   "devDependencies": {
-    "electron": "^18.1.0",
-    "eslint": "^8.14.0",
+    "eslint": "^8.15.0",
     "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-config-prettier": "^8.5.0",
     "eslint-plugin-import": "^2.26.0",
-    "eslint-plugin-n": "^15.2.0",
-    "eslint-plugin-promise": "^6.0.0"
-  },
-  "dependencies": {
-    "regedit": "^5.0.0"
+    "prettier": "^2.6.2"
   }
 }
