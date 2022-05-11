@@ -2,6 +2,7 @@
   "name": "dota-terrain-replacer",
   "version": "1.0.0",
   "description": "NodeJS app to modify the terrain in Dota 2, allowing the use of any available terrain regardless of ownership.",
+  "type": "module",
   "main": "main.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -29,5 +30,8 @@
     "eslint-plugin-import": "^2.26.0",
     "eslint-plugin-n": "^15.2.0",
     "eslint-plugin-promise": "^6.0.0"
+  },
+  "dependencies": {
+    "regedit": "^5.0.0"
   }
 }
