@@ -17,6 +17,7 @@
     "Mod",
     "Game"
   ],
+  "type": "module",
   "author": "ObsoleteXero",
   "license": "MIT",
   "bugs": {

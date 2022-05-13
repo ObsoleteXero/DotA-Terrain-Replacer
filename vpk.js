@@ -1,4 +1,25 @@
-import { fstatSync, readSync, openSync } from "node:fs";
+import {
+  fstatSync,
+  readSync,
+  writeSync,
+  openSync,
+  closeSync,
+  mkdirSync,
+} from "node:fs";
+import { dirname } from "node:path";
+
+function createMetaObject(index) {
+  const meta = {};
+  [
+    meta.preload,
+    meta.crc32,
+    meta.preload_length,
+    meta.archive_index,
+    meta.archive_offset,
+    meta.file_length,
+  ] = index;
+  return meta;
+}
 
 class VPK {
   constructor(path) {
@@ -10,6 +31,7 @@ class VPK {
     const fd = openSync(this.path, "r");
     const header = Buffer.alloc(this.header_length);
     readSync(fd, header, 0, this.header_length, 0);
+    closeSync(fd);
     [
       this.signature,
       this.version,
@@ -25,6 +47,12 @@ class VPK {
     );
   }
 
+  createFilePath(metadata) {
+    return this.path
+      .replace("english", "")
+      .replace("dir.", `${metadata.archive_index.padStart(3, "0")}.`);
+  }
+
   static readcString(file, startPosition) {
     let cString = "";
     let position = startPosition;
@@ -34,7 +62,7 @@ class VPK {
         readSync(file, index, 0, 64, position);
         const pos = index.indexOf(0);
         if (pos > -1) {
-          cString += index.slice(0, pos).toString();
+          cString += index.subarray(0, pos).toString();
           position += cString.length + 1;
           break;
         }
@@ -96,6 +124,7 @@ class VPK {
         }
       }
     }
+    closeSync(fd);
   }
 
   readIndex() {
@@ -107,7 +136,44 @@ class VPK {
   }
 }
 
+class VPKFile {
+  vpkFd;
+
+  constructor(vpk, path, metadata) {
+    this.vpk = vpk;
+    this.path = path;
+    this.metadata = metadata;
+
+    for (const [key, value] of Object.entries(metadata)) {
+      this[key] = value;
+    }
+
+    if (this.metadata.preload !== "") {
+      this.metadata.preload = "...";
+    }
+
+    this.length = this.preload_length + this.file_length;
+    this.offset = 0;
+
+    VPKFile.vpkFd = openSync(this.vpk.path, "r");
+  }
+
+  save() {
+    mkdirSync(dirname(this.path), { recursive: true });
+    const fileBuffer = Buffer.alloc(this.length);
+    readSync(VPKFile.vpkFd, fileBuffer, 0, this.length, this.archive_offset);
+    const fd = openSync(this.path, "w");
+    writeSync(fd, fileBuffer, 0, fileBuffer.length);
+    closeSync(fd);
+    closeSync(VPKFile.vpkFd);
+  }
+}
+
 const mapFile = new VPK("dota.vpk");
 mapFile.readHeader();
 mapFile.readIndex();
-console.log(mapFile.index);
+
+for (const [path, metadata] of Object.entries(mapFile.index)) {
+  const file = new VPKFile(mapFile, path, createMetaObject(metadata));
+  file.save();
+}
