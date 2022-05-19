@@ -28,6 +28,6 @@
         "message": "`with` is disallowed in strict mode because it makes code impossible to predict and optimize."
       }
     ],
-    "max-classes-per-file": ["error", 2]
+    "max-classes-per-file": ["error", 3]
   }
 }
