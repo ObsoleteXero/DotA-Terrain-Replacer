@@ -5,9 +5,11 @@ import {
   openSync,
   closeSync,
   mkdirSync,
+  read,
+  open,
 } from "node:fs";
 import { dirname, extname, sep, parse } from "node:path";
-import { crc32 } from "buffer-crc32";
+import crc32 from "buffer-crc32";
 
 class VPK {
   constructor(path) {
@@ -18,24 +20,32 @@ class VPK {
     this.readIndex();
   }
 
-  readHeader() {
-    const fd = openSync(this.path, "r");
+  readFile() {
+    open(this.path, "r", (err, fd) => {
+      if (err) throw err;
+      this.readHeader(fd);
+      this.readIndex(fd);
+    });
+  }
+
+  readHeader(file) {
     const header = Buffer.alloc(this.header_length);
-    readSync(fd, header, 0, this.header_length, 0);
-    closeSync(fd);
-    [
-      this.signature,
-      this.version,
-      this.tree_length,
-      this.embed_chunk_length,
-      this.chunk_hashes_length,
-      this.self_hashes_length,
-      this.signature_length,
-    ] = new Uint32Array(
-      header.buffer,
-      header.byteOffset,
-      header.length / Uint32Array.BYTES_PER_ELEMENT
-    );
+    read(file, header, 0, this.header_length, 0, (err, _bytesRead, buffer) => {
+      if (err) throw err;
+      [
+        this.signature,
+        this.version,
+        this.tree_length,
+        this.embed_chunk_length,
+        this.chunk_hashes_length,
+        this.self_hashes_length,
+        this.signature_length,
+      ] = new Uint32Array(
+        buffer.buffer,
+        buffer.byteOffset,
+        buffer.length / Uint32Array.BYTES_PER_ELEMENT
+      );
+    });
   }
 
   createFilePath(metadata) {
@@ -66,19 +76,18 @@ class VPK {
     return [cString, position];
   }
 
-  *getIndex() {
-    const fd = openSync(this.path, "r");
+  *getIndex(file) {
     let pos = this.header_length;
     let ext;
     let path;
     let name;
 
     while (true) {
-      [ext, pos] = VPK.readcString(fd, pos);
+      [ext, pos] = VPK.readcString(file, pos);
       if (!ext) break;
 
       while (true) {
-        [path, pos] = VPK.readcString(fd, pos);
+        [path, pos] = VPK.readcString(file, pos);
         if (!path) break;
         if (path !== " ") {
           path += "/";
@@ -87,30 +96,32 @@ class VPK {
         }
 
         while (true) {
-          [name, pos] = VPK.readcString(fd, pos);
+          [name, pos] = VPK.readcString(file, pos);
           if (!name) break;
 
           const metadataBuffer = Buffer.alloc(18);
-          pos += readSync(fd, metadataBuffer, 0, 18, pos);
-
           const metadata = {};
-          [
-            metadata.path,
-            metadata.crc32,
-            metadata.preload_length,
-            metadata.archive_index,
-            metadata.archive_offset,
-            metadata.file_length,
-            metadata.suffix,
-          ] = [
-            `${path}${name}.${ext}`,
-            metadataBuffer.readUInt32LE(0),
-            metadataBuffer.readUInt16LE(4),
-            metadataBuffer.readUInt16LE(6),
-            metadataBuffer.readUInt32LE(8),
-            metadataBuffer.readUInt32LE(12),
-            metadataBuffer.readUInt16LE(16),
-          ];
+          read(file, metadataBuffer, 0, 18, pos, (err, bytesRead, buffer) => {
+            if (err) throw err;
+            pos += bytesRead;
+            [
+              metadata.path,
+              metadata.crc32,
+              metadata.preload_length,
+              metadata.archive_index,
+              metadata.archive_offset,
+              metadata.file_length,
+              metadata.suffix,
+            ] = [
+              `${path}${name}.${ext}`,
+              metadataBuffer.readUInt32LE(0),
+              metadataBuffer.readUInt16LE(4),
+              metadataBuffer.readUInt16LE(6),
+              metadataBuffer.readUInt32LE(8),
+              metadataBuffer.readUInt32LE(12),
+              metadataBuffer.readUInt16LE(16),
+            ];
+          });
 
           if (metadata.suffix !== 65535) {
             throw new Error("Error while parsing index");
@@ -127,9 +138,9 @@ class VPK {
     closeSync(fd);
   }
 
-  readIndex() {
+  readIndex(file) {
     this.index = {};
-    for (const metadata of this.getIndex()) {
+    for (const metadata of this.getIndex(file)) {
       const { path } = metadata;
       delete metadata.path;
       this.index[path] = metadata;
@@ -140,8 +151,10 @@ class VPK {
 class VPKFile {
   vpkFd;
 
+  vpk;
+
   constructor(vpk, path, metadata) {
-    this.vpk = vpk;
+    VPKFile.vpk = vpk;
     this.path = path;
     this.metadata = metadata;
 
@@ -156,7 +169,7 @@ class VPKFile {
     this.length = this.preload_length + this.file_length;
     this.offset = 0;
 
-    VPKFile.vpkFd = openSync(this.vpk.path, "r");
+    VPKFile.vpkFd = openSync(VPKFile.vpk.path, "r");
   }
 
   save() {
@@ -182,7 +195,7 @@ class VPKFile {
 // mapFile.readIndex();
 
 // for (const [path, metadata] of Object.entries(mapFile.index)) {
-//   const file = new VPKFile(mapFile, path, createMetaObject(metadata));
+//   const file = new VPKFile(mapFile, path, metadata);
 //   file.save();
 // }
 
