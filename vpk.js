@@ -7,7 +7,7 @@ import {
   mkdirSync,
 } from "node:fs";
 import { dirname, extname, sep, parse } from "node:path";
-import { crc32 } from "buffer-crc32";
+import crc32 from "buffer-crc32";
 
 class VPK {
   constructor(path) {
@@ -140,8 +140,10 @@ class VPK {
 class VPKFile {
   vpkFd;
 
+  vpk;
+
   constructor(vpk, path, metadata) {
-    this.vpk = vpk;
+    VPKFile.vpk = vpk;
     this.path = path;
     this.metadata = metadata;
 
@@ -156,7 +158,7 @@ class VPKFile {
     this.length = this.preload_length + this.file_length;
     this.offset = 0;
 
-    VPKFile.vpkFd = openSync(this.vpk.path, "r");
+    VPKFile.vpkFd = openSync(VPKFile.vpk.path, "r");
   }
 
   save() {
@@ -177,14 +179,14 @@ class VPKFile {
   }
 }
 
-// const mapFile = new VPK("dota_coloseum.vpk");
-// mapFile.readHeader();
-// mapFile.readIndex();
+const mapFile = new VPK("dota_coloseum.vpk");
+mapFile.readHeader();
+mapFile.readIndex();
 
-// for (const [path, metadata] of Object.entries(mapFile.index)) {
-//   const file = new VPKFile(mapFile, path, createMetaObject(metadata));
-//   file.save();
-// }
+for (const [path, metadata] of Object.entries(mapFile.index)) {
+  const file = new VPKFile(mapFile, path, metadata);
+  file.save();
+}
 
 class NewVPK {
   constructor(path, filelist, data) {
