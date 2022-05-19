@@ -9,19 +9,6 @@ import {
 import { dirname, extname, sep, parse } from "node:path";
 import { crc32 } from "buffer-crc32";
 
-function createMetaObject(index) {
-  const meta = {};
-  [
-    meta.preload,
-    meta.crc32,
-    meta.preload_length,
-    meta.archive_index,
-    meta.archive_offset,
-    meta.file_length,
-  ] = index;
-  return meta;
-}
-
 class VPK {
   constructor(path) {
     this.path = path;
@@ -105,26 +92,34 @@ class VPK {
 
           const metadataBuffer = Buffer.alloc(18);
           pos += readSync(fd, metadataBuffer, 0, 18, pos);
-          const metadata = [
-            metadataBuffer.readUInt32LE(0), // crc32
-            metadataBuffer.readUInt16LE(4), // preload_length
-            metadataBuffer.readUInt16LE(6), // archive_index
-            metadataBuffer.readUInt32LE(8), // archive_offset
-            metadataBuffer.readUInt32LE(12), // file_length
-            metadataBuffer.readUInt16LE(16), // suffix
+
+          const metadata = {};
+          [
+            metadata.path,
+            metadata.crc32,
+            metadata.preload_length,
+            metadata.archive_index,
+            metadata.archive_offset,
+            metadata.file_length,
+            metadata.suffix,
+          ] = [
+            `${path}${name}.${ext}`,
+            metadataBuffer.readUInt32LE(0),
+            metadataBuffer.readUInt16LE(4),
+            metadataBuffer.readUInt16LE(6),
+            metadataBuffer.readUInt32LE(8),
+            metadataBuffer.readUInt32LE(12),
+            metadataBuffer.readUInt16LE(16),
           ];
 
-          if (metadata[5] !== 65535) {
+          if (metadata.suffix !== 65535) {
             throw new Error("Error while parsing index");
           }
-          if (metadata[2] === 32767) {
-            metadata[3] += this.header_length + this.tree_length;
+          if (metadata.archive_index === 32767) {
+            metadata.achive_offset += this.header_length + this.tree_length;
           }
 
-          const preload = Buffer.alloc(metadata[1]);
-          pos += readSync(fd, preload, 0, metadata[1], pos);
-          metadata.splice(0, 0, `${path + name}.${ext}`, preload);
-          metadata.pop();
+          delete metadata.suffix;
           yield metadata;
         }
       }
@@ -135,7 +130,8 @@ class VPK {
   readIndex() {
     this.index = {};
     for (const metadata of this.getIndex()) {
-      const path = metadata.shift();
+      const { path } = metadata;
+      delete metadata.path;
       this.index[path] = metadata;
     }
   }
@@ -261,7 +257,7 @@ function patchTerrain(terrain) {
   const baseMap = new VPK("dota.vpk");
   const baseData = [];
   for (const [path, metadata] of Object.entries(baseMap.index)) {
-    const file = new VPKFile(baseMap, path, createMetaObject(metadata));
+    const file = new VPKFile(baseMap, path, metadata);
     baseData.push(file.getFileData());
   }
 
@@ -269,7 +265,7 @@ function patchTerrain(terrain) {
   const guestMap = new VPK(terrain);
   const guestData = [];
   for (const [path, metadata] of Object.entries(guestMap.index)) {
-    const file = new VPKFile(guestMap, path, createMetaObject(metadata));
+    const file = new VPKFile(guestMap, path, metadata);
     guestData.push(file.getFileData());
   }
 
