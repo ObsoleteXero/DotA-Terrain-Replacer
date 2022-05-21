@@ -1,28 +1,21 @@
-import {
-  fstatSync,
-  readSync,
-  writeSync,
-  openSync,
-  closeSync,
-  mkdirSync,
-} from "node:fs";
-import { dirname, extname, sep, parse } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, extname, parse } from "node:path";
 import crc32 from "buffer-crc32";
 
 class VPK {
   constructor(path) {
     this.path = path;
     this.header_length = 28;
-
-    this.readHeader();
-    this.readIndex();
   }
 
-  readHeader() {
-    const fd = openSync(this.path, "r");
-    const header = Buffer.alloc(this.header_length);
-    readSync(fd, header, 0, this.header_length, 0);
-    closeSync(fd);
+  async readVPK() {
+    this.vpkData = await readFile(this.path);
+    await this.readHeader();
+    await this.readIndex();
+  }
+
+  async readHeader() {
+    const header = this.vpkData.subarray(0, this.header_length);
     [
       this.signature,
       this.version,
@@ -44,41 +37,34 @@ class VPK {
       .replace("dir.", `${metadata.archive_index.padStart(3, "0")}.`);
   }
 
-  static readcString(file, startPosition) {
+  static async readcString(buffer, startPosition) {
     let cString = "";
     let position = startPosition;
-    const filesize = fstatSync(file).size;
-    const index = Buffer.alloc(64);
+    const index = buffer.subarray(startPosition, startPosition + 64);
     do {
-      try {
-        readSync(file, index, 0, 64, position);
-        const pos = index.indexOf(0);
-        if (pos > -1) {
-          cString += index.subarray(0, pos).toString();
-          position += cString.length + 1;
-          break;
-        }
-        cString += index.toString();
-      } catch (Readerr) {
-        return ["", position];
+      const pos = index.indexOf(0);
+      if (pos > -1) {
+        cString += index.subarray(0, pos).toString();
+        position += cString.length + 1;
+        break;
       }
-    } while (position < filesize);
+      cString += index.toString();
+    } while (position < buffer.length);
     return [cString, position];
   }
 
-  *getIndex() {
-    const fd = openSync(this.path, "r");
-    let pos = this.header_length;
+  async *getIndex(buffer) {
+    let pos = 0;
     let ext;
     let path;
     let name;
 
     while (true) {
-      [ext, pos] = VPK.readcString(fd, pos);
+      [ext, pos] = await VPK.readcString(buffer, pos);
       if (!ext) break;
 
       while (true) {
-        [path, pos] = VPK.readcString(fd, pos);
+        [path, pos] = await VPK.readcString(buffer, pos);
         if (!path) break;
         if (path !== " ") {
           path += "/";
@@ -87,13 +73,12 @@ class VPK {
         }
 
         while (true) {
-          [name, pos] = VPK.readcString(fd, pos);
+          [name, pos] = await VPK.readcString(buffer, pos);
           if (!name) break;
 
-          const metadataBuffer = Buffer.alloc(18);
-          pos += readSync(fd, metadataBuffer, 0, 18, pos);
-
+          const metadataBuffer = buffer.subarray(pos, pos + 18);
           const metadata = {};
+          pos += 18;
           [
             metadata.path,
             metadata.crc32,
@@ -116,7 +101,7 @@ class VPK {
             throw new Error("Error while parsing index");
           }
           if (metadata.archive_index === 32767) {
-            metadata.achive_offset += this.header_length + this.tree_length;
+            metadata.archive_offset += this.header_length + this.tree_length;
           }
 
           delete metadata.suffix;
@@ -124,12 +109,13 @@ class VPK {
         }
       }
     }
-    closeSync(fd);
   }
 
-  readIndex() {
+  async readIndex() {
     this.index = {};
-    for (const metadata of this.getIndex()) {
+    for await (const metadata of this.getIndex(
+      this.vpkData.subarray(this.header_length, this.vpkData.length)
+    )) {
       const { path } = metadata;
       delete metadata.path;
       this.index[path] = metadata;
@@ -138,14 +124,11 @@ class VPK {
 }
 
 class VPKFile {
-  vpkFd;
-
-  vpk;
-
   constructor(vpk, path, metadata) {
-    VPKFile.vpk = vpk;
+    this.vpk = vpk;
     this.path = path;
     this.metadata = metadata;
+    this.vpkData = this.vpk.vpkData;
 
     for (const [key, value] of Object.entries(metadata)) {
       this[key] = value;
@@ -157,35 +140,24 @@ class VPKFile {
 
     this.length = this.preload_length + this.file_length;
     this.offset = 0;
-
-    VPKFile.vpkFd = openSync(VPKFile.vpk.path, "r");
   }
 
-  save() {
-    mkdirSync(dirname(this.path), { recursive: true });
-    const fileBuffer = Buffer.alloc(this.length);
-    readSync(VPKFile.vpkFd, fileBuffer, 0, this.length, this.archive_offset);
-    const fd = openSync(this.path, "w");
-    writeSync(fd, fileBuffer, 0, fileBuffer.length);
-    closeSync(fd);
-    closeSync(VPKFile.vpkFd);
+  async save() {
+    await mkdir(dirname(this.path), { recursive: true });
+    const fileBuffer = this.vpkData.subarray(
+      this.archive_offset,
+      this.archive_offset + this.file_length
+    );
+    await writeFile(this.path, fileBuffer);
   }
 
-  getFileData() {
-    const fileBuffer = Buffer.alloc(this.length);
-    readSync(VPKFile.vpkFd, fileBuffer, 0, this.length, this.archive_offset);
-    closeSync(VPKFile.vpkFd);
+  async getFileData() {
+    const fileBuffer = this.vpkData.subarray(
+      this.archive_offset,
+      this.archive_offset + this.length
+    );
     return { path: this.path, data: fileBuffer };
   }
-}
-
-const mapFile = new VPK("dota_coloseum.vpk");
-mapFile.readHeader();
-mapFile.readIndex();
-
-for (const [path, metadata] of Object.entries(mapFile.index)) {
-  const file = new VPKFile(mapFile, path, metadata);
-  file.save();
 }
 
 class NewVPK {
@@ -238,9 +210,9 @@ class NewVPK {
   writeTree() {
     for (const ext of Object.entries(this.tree)) {
       let treeBuffer = Buffer.from(`${ext}\0`);
-      for (const dir of Object.entries(tree[ext])) {
+      for (const dir of Object.entries(this.tree[ext])) {
         treeBuffer = Buffer.concat([treeBuffer, Buffer.from(`${dir}\0`)]);
-        for (const file of tree[ext][dir]) {
+        for (const file of this.tree[ext][dir]) {
           treeBuffer = Buffer.concat([treeBuffer, Buffer.from(`${file}\0`)]);
 
           // Append file data
@@ -280,7 +252,7 @@ function patchTerrain(terrain) {
     const data = guestFileArray[1];
 
     if (extname(path) === ".vmap_c") {
-      path = `${dirname(path)}${sep}dota.vmap_c`;
+      path = `${dirname(path)}/dota.vmap_c`;
     }
 
     patchedFiles.push(path);
@@ -299,3 +271,15 @@ function patchTerrain(terrain) {
     patchedData.push({ path, data });
   });
 }
+
+async function testFunction() {
+  const mapFile = new VPK("dota.vpk");
+  await mapFile.readVPK();
+
+  for (const [path, metadata] of Object.entries(mapFile.index)) {
+    const file = new VPKFile(mapFile, path, metadata);
+    await file.save();
+  }
+}
+
+testFunction().catch(console.error);
