@@ -1,13 +1,4 @@
-import {
-  fstatSync,
-  readSync,
-  writeSync,
-  openSync,
-  closeSync,
-  mkdirSync,
-  read,
-  open,
-} from "node:fs";
+import { mkdir, open, readFile } from "node:fs/promises";
 import { dirname, extname, sep, parse } from "node:path";
 import crc32 from "buffer-crc32";
 
@@ -16,36 +7,31 @@ class VPK {
     this.path = path;
     this.header_length = 28;
 
-    this.readHeader();
-    this.readIndex();
+    this.readVPK();
   }
 
-  readFile() {
-    open(this.path, "r", (err, fd) => {
-      if (err) throw err;
-      this.readHeader(fd);
-      this.readIndex(fd);
-    });
+  async readVPK() {
+    const vpkData = await readFile(this.path, "r");
+    await this.readHeader(vpkData.subarray(this.header_length));
+    await this.readIndex(vpkData.subarray(this.header_length, vpkData.length));
   }
 
-  readHeader(file) {
+  async readHeader(buffer) {
     const header = Buffer.alloc(this.header_length);
-    read(file, header, 0, this.header_length, 0, (err, _bytesRead, buffer) => {
-      if (err) throw err;
-      [
-        this.signature,
-        this.version,
-        this.tree_length,
-        this.embed_chunk_length,
-        this.chunk_hashes_length,
-        this.self_hashes_length,
-        this.signature_length,
-      ] = new Uint32Array(
-        buffer.buffer,
-        buffer.byteOffset,
-        buffer.length / Uint32Array.BYTES_PER_ELEMENT
-      );
-    });
+    await file.read(header, 0, this.header_length, 0);
+    [
+      this.signature,
+      this.version,
+      this.tree_length,
+      this.embed_chunk_length,
+      this.chunk_hashes_length,
+      this.self_hashes_length,
+      this.signature_length,
+    ] = new Uint32Array(
+      header.buffer,
+      header.byteOffset,
+      header.length / Uint32Array.BYTES_PER_ELEMENT
+    );
   }
 
   createFilePath(metadata) {
@@ -54,14 +40,14 @@ class VPK {
       .replace("dir.", `${metadata.archive_index.padStart(3, "0")}.`);
   }
 
-  static readcString(file, startPosition) {
+  static async readcString(file, startPosition) {
     let cString = "";
     let position = startPosition;
-    const filesize = fstatSync(file).size;
+    const fstat = await file.stat();
     const index = Buffer.alloc(64);
     do {
       try {
-        readSync(file, index, 0, 64, position);
+        await file.read(index, 0, 64, position);
         const pos = index.indexOf(0);
         if (pos > -1) {
           cString += index.subarray(0, pos).toString();
@@ -72,22 +58,22 @@ class VPK {
       } catch (Readerr) {
         return ["", position];
       }
-    } while (position < filesize);
+    } while (position < fstat.size);
     return [cString, position];
   }
 
-  *getIndex(file) {
+  async *getIndex(file) {
     let pos = this.header_length;
     let ext;
     let path;
     let name;
 
     while (true) {
-      [ext, pos] = VPK.readcString(file, pos);
+      [ext, pos] = await VPK.readcString(file, pos);
       if (!ext) break;
 
       while (true) {
-        [path, pos] = VPK.readcString(file, pos);
+        [path, pos] = await VPK.readcString(file, pos);
         if (!path) break;
         if (path !== " ") {
           path += "/";
@@ -96,32 +82,30 @@ class VPK {
         }
 
         while (true) {
-          [name, pos] = VPK.readcString(file, pos);
+          [name, pos] = await VPK.readcString(file, pos);
           if (!name) break;
 
           const metadataBuffer = Buffer.alloc(18);
           const metadata = {};
-          read(file, metadataBuffer, 0, 18, pos, (err, bytesRead, buffer) => {
-            if (err) throw err;
-            pos += bytesRead;
-            [
-              metadata.path,
-              metadata.crc32,
-              metadata.preload_length,
-              metadata.archive_index,
-              metadata.archive_offset,
-              metadata.file_length,
-              metadata.suffix,
-            ] = [
-              `${path}${name}.${ext}`,
-              metadataBuffer.readUInt32LE(0),
-              metadataBuffer.readUInt16LE(4),
-              metadataBuffer.readUInt16LE(6),
-              metadataBuffer.readUInt32LE(8),
-              metadataBuffer.readUInt32LE(12),
-              metadataBuffer.readUInt16LE(16),
-            ];
-          });
+          await file.read(metadataBuffer, 0, 18, pos);
+          pos += 18;
+          [
+            metadata.path,
+            metadata.crc32,
+            metadata.preload_length,
+            metadata.archive_index,
+            metadata.archive_offset,
+            metadata.file_length,
+            metadata.suffix,
+          ] = [
+            `${path}${name}.${ext}`,
+            metadataBuffer.readUInt32LE(0),
+            metadataBuffer.readUInt16LE(4),
+            metadataBuffer.readUInt16LE(6),
+            metadataBuffer.readUInt32LE(8),
+            metadataBuffer.readUInt32LE(12),
+            metadataBuffer.readUInt16LE(16),
+          ];
 
           if (metadata.suffix !== 65535) {
             throw new Error("Error while parsing index");
@@ -135,12 +119,12 @@ class VPK {
         }
       }
     }
-    closeSync(fd);
+    await file.close();
   }
 
-  readIndex(file) {
+  async readIndex(file) {
     this.index = {};
-    for (const metadata of this.getIndex(file)) {
+    for await (const metadata of this.getIndex(file)) {
       const { path } = metadata;
       delete metadata.path;
       this.index[path] = metadata;
@@ -149,12 +133,8 @@ class VPK {
 }
 
 class VPKFile {
-  vpkFd;
-
-  vpk;
-
   constructor(vpk, path, metadata) {
-    VPKFile.vpk = vpk;
+    this.vpk = vpk;
     this.path = path;
     this.metadata = metadata;
 
@@ -169,35 +149,28 @@ class VPKFile {
     this.length = this.preload_length + this.file_length;
     this.offset = 0;
 
-    VPKFile.vpkFd = openSync(VPKFile.vpk.path, "r");
+    open(this.vpk.path, "r").then((file) => {
+      this.vpkFd = file;
+    });
   }
 
-  save() {
-    mkdirSync(dirname(this.path), { recursive: true });
+  async save() {
+    await mkdir(dirname(this.path), { recursive: true });
     const fileBuffer = Buffer.alloc(this.length);
-    readSync(VPKFile.vpkFd, fileBuffer, 0, this.length, this.archive_offset);
-    const fd = openSync(this.path, "w");
-    writeSync(fd, fileBuffer, 0, fileBuffer.length);
-    closeSync(fd);
-    closeSync(VPKFile.vpkFd);
+    await this.vpkFd.read(fileBuffer, 0, this.length, this.archive_offset);
+    await this.vpkFd.close();
+    const fd = await open(this.path, "w");
+    await fd.write(fileBuffer, 0, fileBuffer.length);
+    await fd.close();
   }
 
-  getFileData() {
+  async getFileData() {
     const fileBuffer = Buffer.alloc(this.length);
-    readSync(VPKFile.vpkFd, fileBuffer, 0, this.length, this.archive_offset);
-    closeSync(VPKFile.vpkFd);
+    await this.vpkFd.read(fileBuffer, 0, this.length, this.archive_offset);
+    await this.vpkFd.close();
     return { path: this.path, data: fileBuffer };
   }
 }
-
-// const mapFile = new VPK("dota_coloseum.vpk");
-// mapFile.readHeader();
-// mapFile.readIndex();
-
-// for (const [path, metadata] of Object.entries(mapFile.index)) {
-//   const file = new VPKFile(mapFile, path, metadata);
-//   file.save();
-// }
 
 class NewVPK {
   constructor(path, filelist, data) {
@@ -249,9 +222,9 @@ class NewVPK {
   writeTree() {
     for (const ext of Object.entries(this.tree)) {
       let treeBuffer = Buffer.from(`${ext}\0`);
-      for (const dir of Object.entries(tree[ext])) {
+      for (const dir of Object.entries(this.tree[ext])) {
         treeBuffer = Buffer.concat([treeBuffer, Buffer.from(`${dir}\0`)]);
-        for (const file of tree[ext][dir]) {
+        for (const file of this.tree[ext][dir]) {
           treeBuffer = Buffer.concat([treeBuffer, Buffer.from(`${file}\0`)]);
 
           // Append file data
@@ -310,3 +283,15 @@ function patchTerrain(terrain) {
     patchedData.push({ path, data });
   });
 }
+
+async function testFunction() {
+  const mapFile = new VPK("dota.vpk");
+  await mapFile.readFile();
+
+  for (const [path, metadata] of Object.entries(mapFile.index)) {
+    const file = new VPKFile(mapFile, path, metadata);
+    await file.save();
+  }
+}
+
+testFunction().catch(console.error);
