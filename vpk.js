@@ -163,9 +163,9 @@ class VPKFile {
 }
 
 class NewVPK {
-  constructor(path, filelist, data) {
+  constructor(path, data) {
     this.path = path;
-    this.filelist = filelist;
+    this.filelist = Object.keys(data);
     this.data = data;
 
     this.tree = {};
@@ -316,7 +316,6 @@ async function patchTerrain(terrain) {
 
   // Patch base with guest
   const patchedData = {};
-  const patchedFiles = [];
 
   guestData.forEach((guestFileArray) => {
     let { path } = guestFileArray;
@@ -326,23 +325,21 @@ async function patchTerrain(terrain) {
       path = `${dirname(path)}/dota.vmap_c`;
     }
 
-    patchedFiles.push(path);
     patchedData[path] = data;
   });
 
   baseData.forEach((baseFileArray) => {
     const { path, data } = baseFileArray;
 
-    if (patchedFiles.includes(path)) {
+    if (path in patchedData) {
       return;
     }
 
-    patchedFiles.push(path);
     patchedData[path] = data;
   });
 
   // Create new VPK
-  const patchedVPK = new NewVPK("patched.vpk", patchedFiles, patchedData);
+  const patchedVPK = new NewVPK("patched.vpk", patchedData);
   patchedVPK.createTree();
   await patchedVPK.writeFile();
 }
@@ -361,5 +358,5 @@ async function patchFunction() {
   await patchTerrain("dota_coloseum.vpk");
 }
 
-extractFunction().catch(console.error);
-// patchFunction().catch(console.error);
+// extractFunction().catch(console.error);
+patchFunction().catch(console.error);
