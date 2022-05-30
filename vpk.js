@@ -2,6 +2,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, extname, parse } from "node:path";
 import crc32 from "buffer-crc32";
 
+const { createHash } = await import("node:crypto");
+
 class VPK {
   constructor(path) {
     this.path = path;
@@ -168,28 +170,30 @@ class NewVPK {
 
     this.tree = {};
     this.treeLength = 0;
+    this.headerLength = 28;
   }
 
   createTree() {
     // Create tree using fileList
     this.filelist.forEach((file) => {
       const filePath = parse(file);
+      const ext = filePath.ext.replace(".", "");
 
-      if (filePath.ext in this.tree) {
-        if (filePath.dir in this.tree[filePath.ext]) {
-          this.tree[filePath.ext][filePath.dir].push(filePath.name);
+      if (ext in this.tree) {
+        if (filePath.dir in this.tree[ext]) {
+          this.tree[ext][filePath.dir].push(filePath.name);
         } else {
-          this.tree[filePath.ext][filePath.dir] = [filePath.name];
+          this.tree[ext][filePath.dir] = [filePath.name];
         }
       } else {
-        this.tree[filePath.ext] = { [filePath.dir]: [filePath.name] };
+        this.tree[ext] = { [filePath.dir]: [filePath.name] };
       }
     });
 
     // Calculate tree length
-    for (const ext of Object.entries(this.tree)) {
+    for (const ext of Object.keys(this.tree)) {
       this.treeLength += ext.length + 2;
-      for (const dir of Object.entries(this.tree[ext])) {
+      for (const dir of Object.keys(this.tree[ext])) {
         this.treeLength += dir.length + 2;
         for (const file of this.tree[ext][dir]) {
           this.treeLength += file.length + 19;
@@ -199,81 +203,152 @@ class NewVPK {
     this.treeLength += 1;
   }
 
-  // // Create header
-  // const header = Buffer.alloc(28);
-  // header.writeUInt32LE(0x55aa1234); // signature
-  // header.writeUInt32LE(2, 4); // version
-  // header.writeUInt32LE(treeLength, 8); // tree_length
+  async writeFile() {
+    let dataOffset = this.headerLength + this.treeLength;
 
-  // const dataOffset = header.length + treeLength;
+    const treeBufferArray = [];
+    const treeDataArray = [];
+    let embedChunkLength = 0;
+    for (const ext of Object.keys(this.tree)) {
+      treeBufferArray.push(Buffer.from(`${ext}\0`));
 
-  writeTree() {
-    for (const ext of Object.entries(this.tree)) {
-      let treeBuffer = Buffer.from(`${ext}\0`);
-      for (const dir of Object.entries(this.tree[ext])) {
-        treeBuffer = Buffer.concat([treeBuffer, Buffer.from(`${dir}\0`)]);
+      for (const dir of Object.keys(this.tree[ext])) {
+        treeBufferArray.push(Buffer.from(`${dir}\0`));
+
         for (const file of this.tree[ext][dir]) {
-          treeBuffer = Buffer.concat([treeBuffer, Buffer.from(`${file}\0`)]);
+          treeBufferArray.push(Buffer.from(`${file}\0`));
 
-          // Append file data
-          const metadataOffset = treeBuffer.length;
+          // Write Metadata
           const fileOffset = dataOffset;
           const realFilename = !ext ? file : `${file}.${ext}`;
-          const checksum = crc32(data[`${dir}/${realFilename}`]);
+
+          const fileData = this.data[`${dir}/${realFilename}`];
+          const checksum = crc32.unsigned(fileData);
+
+          const metadata = Buffer.alloc(18);
+          metadata.writeUInt32LE(checksum, 0); // crc32  & 4294967295
+          metadata.writeUInt16LE(0, 4); // preload_length
+          metadata.writeUInt16LE(32767, 6); // archive_index
+          metadata.writeUInt32LE(
+            fileOffset - this.treeLength - this.headerLength,
+            8
+          ); // archive_offset
+          metadata.writeUInt32LE(fileData.length, 12); // file_length
+          metadata.writeUInt16LE(65535, 16); // suffix
+
+          treeBufferArray.push(metadata);
+          treeDataArray.push(fileData);
+          embedChunkLength += fileData.length;
+          dataOffset += fileData.length;
         }
+        // Next dir
+        treeBufferArray.push(Buffer.from("\0"));
       }
+      // Next ext
+      treeBufferArray.push(Buffer.from("\0"));
     }
+    // End of tree
+    treeBufferArray.push(Buffer.from("\0"));
+
+    // Create header
+    const header = Buffer.alloc(this.headerLength);
+    header.writeUInt32LE(0x55aa1234); // signature
+    header.writeUInt32LE(2, 4); // version
+    header.writeUInt32LE(this.treeLength, 8); // tree_length
+    header.writeUInt32LE(embedChunkLength, 12); // embed_chunk_length
+    header.writeUInt32LE(0, 16); // chunk_hashes_length
+    header.writeUInt32LE(48, 20); // self_hashes_length
+    header.writeUInt32LE(0, 24);
+
+    // Hash
+    const fileChecksum = createHash("md5");
+    const chunkHashesChecksum = createHash("md5");
+    const treeChecksum = createHash("md5");
+
+    treeChecksum.update(Buffer.concat(treeBufferArray));
+    fileChecksum.update(
+      Buffer.concat([...[header], ...treeBufferArray, ...treeDataArray])
+    );
+
+    const treeDigest = treeChecksum.digest();
+    const chunkDigest = chunkHashesChecksum.digest();
+
+    fileChecksum.update(treeDigest);
+    fileChecksum.update(chunkDigest);
+
+    const hashes = Buffer.concat([
+      treeDigest,
+      chunkDigest,
+      fileChecksum.digest(),
+    ]);
+
+    // Save
+    await writeFile(
+      this.path,
+      Buffer.concat([
+        ...[header],
+        ...treeBufferArray,
+        ...treeDataArray,
+        ...[hashes],
+      ])
+    );
   }
 }
 
-function patchTerrain(terrain) {
+async function patchTerrain(terrain) {
   // Unpack the default map file
   const baseMap = new VPK("dota.vpk");
+  await baseMap.readVPK();
   const baseData = [];
   for (const [path, metadata] of Object.entries(baseMap.index)) {
     const file = new VPKFile(baseMap, path, metadata);
-    baseData.push(file.getFileData());
+    baseData.push(await file.getFileData());
   }
 
   // Unpack selected terrain
   const guestMap = new VPK(terrain);
+  await guestMap.readVPK();
   const guestData = [];
   for (const [path, metadata] of Object.entries(guestMap.index)) {
     const file = new VPKFile(guestMap, path, metadata);
-    guestData.push(file.getFileData());
+    guestData.push(await file.getFileData());
   }
 
   // Patch base with guest
-  const patchedData = [];
+  const patchedData = {};
   const patchedFiles = [];
 
   guestData.forEach((guestFileArray) => {
-    let path = guestFileArray[0];
-    const data = guestFileArray[1];
+    let { path } = guestFileArray;
+    const { data } = guestFileArray;
 
     if (extname(path) === ".vmap_c") {
       path = `${dirname(path)}/dota.vmap_c`;
     }
 
     patchedFiles.push(path);
-    patchedData.push({ path, data });
+    patchedData[path] = data;
   });
 
   baseData.forEach((baseFileArray) => {
-    const path = baseFileArray[0];
-    const data = baseFileArray[1];
+    const { path, data } = baseFileArray;
 
     if (patchedFiles.includes(path)) {
       return;
     }
 
     patchedFiles.push(path);
-    patchedData.push({ path, data });
+    patchedData[path] = data;
   });
+
+  // Create new VPK
+  const patchedVPK = new NewVPK("patched.vpk", patchedFiles, patchedData);
+  patchedVPK.createTree();
+  await patchedVPK.writeFile();
 }
 
-async function testFunction() {
-  const mapFile = new VPK("dota.vpk");
+async function extractFunction() {
+  const mapFile = new VPK("dota_coloseum.vpk");
   await mapFile.readVPK();
 
   for (const [path, metadata] of Object.entries(mapFile.index)) {
@@ -282,4 +357,9 @@ async function testFunction() {
   }
 }
 
-testFunction().catch(console.error);
+async function patchFunction() {
+  await patchTerrain("dota_coloseum.vpk");
+}
+
+extractFunction().catch(console.error);
+// patchFunction().catch(console.error);
