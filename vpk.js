@@ -341,9 +341,5 @@ async function extractVPK() {
   }
 }
 
-async function patchFunction() {
-  await patchTerrain("dota_coloseum.vpk");
-}
-
 extractVPK().catch(console.error);
-// patchFunction().catch(console.error);
+patchTerrain("dota_colosum.vpk").catch(console.error);
