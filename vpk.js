@@ -284,10 +284,10 @@ async function saveVPK(path, data) {
   );
 }
 
-async function patchTerrain(terrain) {
+async function patchTerrain(base, terrain, outPath) {
   // Unpack the default map file
-  const baseMap = new VPK("dota.vpk");
-  await baseMap.readVPK();
+  const baseMap = new VPK(base);
+  await baseMap.read();
   const baseData = [];
   for (const [path, metadata] of Object.entries(baseMap.index)) {
     const file = new VPKFile(baseMap, path, metadata);
@@ -296,7 +296,7 @@ async function patchTerrain(terrain) {
 
   // Unpack selected terrain
   const guestMap = new VPK(terrain);
-  await guestMap.readVPK();
+  await guestMap.read();
   const guestData = [];
   for (const [path, metadata] of Object.entries(guestMap.index)) {
     const file = new VPKFile(guestMap, path, metadata);
@@ -328,11 +328,11 @@ async function patchTerrain(terrain) {
   });
 
   // Create new VPK
-  await saveVPK("patched.vpk", patchedData);
+  await saveVPK(outPath, patchedData);
 }
 
-async function extractVPK() {
-  const mapFile = new VPK("patched.vpk");
+async function extractVPK(filename) {
+  const mapFile = new VPK(filename);
   await mapFile.read();
 
   for (const [path, metadata] of Object.entries(mapFile.index)) {
@@ -341,5 +341,9 @@ async function extractVPK() {
   }
 }
 
-extractVPK().catch(console.error);
-patchTerrain("dota_colosum.vpk").catch(console.error);
+// extractVPK("preview.vpk").catch(console.error);
+// patchTerrain("dota.vpk", "dota_coloseum.vpk", "patched.vpk").catch(
+//   console.error
+// );
+
+export default patchTerrain;

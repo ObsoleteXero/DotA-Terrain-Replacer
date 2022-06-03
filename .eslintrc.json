@@ -30,6 +30,7 @@
     ],
     "max-classes-per-file": ["error", 2],
     "no-await-in-loop": ["off"],
-    "no-bitwise": ["off"]
+    "no-bitwise": ["off"],
+    "no-console": "off"
   }
 }
