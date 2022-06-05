@@ -26,7 +26,7 @@ async function main() {
     }
     await patchTerrain(
       BasePath,
-      await getGuestPath(selection),
+      await getGuestPath(selection[0]),
       await tempcontent()
     );
     console.log(

@@ -1,0 +1,48 @@
+{
+  "Desert Terrain": [
+    "dota_desert.vpk",
+    "https://static.wikia.nocookie.net/dota2_gamepedia/images/f/f5/Cosmetic_icon_Desert_Terrain.png/revision/latest"
+  ],
+  "The King's New Journey": [
+    "dota_journey.vpk",
+    "https://static.wikia.nocookie.net/dota2_gamepedia/images/0/0e/Cosmetic_icon_The_King%27s_New_Journey.png/revision/latest"
+  ],
+
+  "Immortal Gardens": [
+    "dota_coloseum.vpk",
+    "https://static.wikia.nocookie.net/dota2_gamepedia/images/a/a1/Cosmetic_icon_Immortal_Gardens.png/revision/latest"
+  ],
+  "Overgrown Empire": [
+    "dota_jungle.vpk",
+    "https://static.wikia.nocookie.net/dota2_gamepedia/images/5/57/Cosmetic_icon_Overgrown_Empire.png/revision/latest"
+  ],
+  "Reef's Edge": [
+    "dota_reef.vpk",
+    "https://static.wikia.nocookie.net/dota2_gamepedia/images/f/fa/Cosmetic_icon_Reef%27s_Edge.png/revision/latest"
+  ],
+  "Sanctums of the Divine": [
+    "dota_ti10.vpk",
+    "https://static.wikia.nocookie.net/dota2_gamepedia/images/1/16/Cosmetic_icon_Sanctums_of_the_Divine.png/revision/latest"
+  ],
+  "The Emerald Abyss": [
+    "dota_cavern.vpk",
+    "https://static.wikia.nocookie.net/dota2_gamepedia/images/6/66/Cosmetic_icon_The_Emerald_Abyss.png/revision/latest"
+  ],
+
+  "Seasonal Terrain: Autumn": [
+    "dota_autumn.vpk",
+    "https://static.wikia.nocookie.net/dota2_gamepedia/images/0/03/Cosmetic_icon_Seasonal_Terrain_-_Autumn.png/revision/latest"
+  ],
+  "Seasonal Terrain: Winter": [
+    "dota_winter.vpk",
+    "https://static.wikia.nocookie.net/dota2_gamepedia/images/b/ba/Cosmetic_icon_Seasonal_Terrain_-_Winter.png/revision/latest"
+  ],
+  "Seasonal Terrain: Spring": [
+    "dota_spring.vpk",
+    "https://static.wikia.nocookie.net/dota2_gamepedia/images/0/00/Cosmetic_icon_Seasonal_Terrain_-_Spring.png/revision/latest"
+  ],
+  "Seasonal Terrain: Summer": [
+    "dota_summer.vpk",
+    "https://static.wikia.nocookie.net/dota2_gamepedia/images/2/24/Cosmetic_icon_Seasonal_Terrain_-_Summer.png/revision/latest"
+  ]
+}

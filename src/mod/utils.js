@@ -58,21 +58,13 @@ async function tempcontent(language = "tempcontent") {
   return path.resolve(tempcontentPath, "dota.vpk");
 }
 
-const terrains = {
-  "Desert Terrain": "dota_desert.vpk",
-  "The King's New Journey": "dota_journey.vpk",
+async function loadTerrains() {
+  // Load terrains from terrains.json
+  const jsonFile = await readFile("terrains.json");
+  return JSON.parse(jsonFile);
+}
 
-  "Immortal Gardens": "dota_coloseum.vpk",
-  "Overgrown Empire": "dota_jungle.vpk",
-  "Reef's Edge": "dota_reef.vpk",
-  "Sanctums of the Divine": "dota_ti10.vpk",
-  "The Emerald Abyss": "dota_cavern.vpk",
-
-  "Seasonal Terrain: Autumn": "dota_autumn.vpk",
-  "Seasonal Terrain: Winter": "dota_winter.vpk",
-  "Seasonal Terrain: Spring": "dota_spring.vpk",
-  "Seasonal Terrain: Summer": "dota_summer.vpk",
-};
+const terrains = await loadTerrains();
 
 const BasePath = await getBasePath();
 

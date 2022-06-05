@@ -1,7 +1,8 @@
 {
   "env": {
     "es2021": true,
-    "node": true
+    "node": true,
+    "browser": true
   },
   "extends": ["airbnb-base", "prettier"],
   "parserOptions": {
@@ -31,6 +32,20 @@
     "max-classes-per-file": ["error", 2],
     "no-await-in-loop": ["off"],
     "no-bitwise": ["off"],
-    "no-console": "off"
+    "no-console": "off",
+    "import/no-extraneous-dependencies": [
+      "error",
+      {
+        "devDependencies": true,
+        "optionalDependencies": false,
+        "peerDependencies": false
+      }
+    ],
+    "import/extensions": [
+      "error",
+      {
+        "js": "always"
+      }
+    ]
   }
 }
