@@ -1,41 +1,33 @@
 {
   "name": "dota-terrain-replacer",
   "version": "1.0.0",
+  "type": "module",
+  "main": "src/mod/cli.js",
   "description": "App to patch the default map file in DotA 2 with the selected terrain file, allowing the use of all terrains regardless of ownership.",
-  "main": "src/main.cjs",
-  "scripts": {
-    "start": "electron .",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+  "scripts": {},
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ObsoleteXero/DotA-Terrain-Replacer.git"
   },
   "keywords": [
     "Dota",
-    "Electron",
     "Node",
     "Mod",
     "Game"
   ],
-  "type": "module",
   "author": "ObsoleteXero",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/ObsoleteXero/DotA-Terrain-Replacer/issues"
   },
   "homepage": "https://github.com/ObsoleteXero/DotA-Terrain-Replacer#readme",
-  "devDependencies": {
-    "electron": "^19.0.3",
-    "eslint": "^8.15.0",
-    "eslint-config-airbnb-base": "^15.0.0",
-    "eslint-config-prettier": "^8.5.0",
-    "eslint-plugin-import": "^2.26.0",
-    "prettier": "^2.6.2"
-  },
   "dependencies": {
     "buffer-crc32": "^0.2.13",
-    "vue": "^3.2.36",
     "winreg": "^1.2.4"
+  },
+  "devDependencies": {
+    "eslint": "^8.22.0",
+    "eslint-config-prettier": "^8.5.0",
+    "prettier": "^2.7.1"
   }
 }
