@@ -5,6 +5,15 @@ The modified file can be loaded by adding the `-language tempcontent` launch opt
 
 ## Usage
 
-`node src/mod/cli.js`  
+```
+npm install
+node src/mod/cli.js
+```
+
 Opens an interactive command line interface.  
 The launch option must be added manually.
+
+## Requirements
+
+- NodeJS
+- Dota 2

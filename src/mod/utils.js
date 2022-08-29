@@ -60,7 +60,7 @@ async function tempcontent(language = "tempcontent") {
 
 async function loadTerrains() {
   // Load terrains from terrains.json
-  const jsonFile = await readFile("terrains.json");
+  const jsonFile = await readFile("src/mod/terrains.json");
   return JSON.parse(jsonFile);
 }
 
